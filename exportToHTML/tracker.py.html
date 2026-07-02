@@ -1,0 +1,129 @@
+<html>
+<head>
+<title>tracker.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #000080; font-weight: bold;}
+.s1 { color: #000000;}
+.s2 { color: #808080; font-style: italic;}
+.s3 { color: #0000ff;}
+.s4 { color: #008000; font-weight: bold;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+tracker.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span>os
+<span class="s0">import </span>cv2
+<span class="s0">import </span>json
+<span class="s0">from </span>ultralytics <span class="s0">import </span>YOLO
+<span class="s0">from </span>deep_sort_realtime.deepsort_tracker <span class="s0">import </span>DeepSort
+
+<span class="s2"># ----------------- Constants ----------------- #</span>
+
+CLASS_NAMES = {
+    <span class="s3">3</span>: <span class="s4">&quot;bus&quot;</span>,
+    <span class="s3">1</span>: <span class="s4">&quot;car&quot;</span>,
+    <span class="s3">0</span>: <span class="s4">&quot;truck&quot;</span>,
+    <span class="s3">2</span>: <span class="s4">&quot;van&quot;</span>
+}
+
+video_path = <span class="s4">'HD Stock Videos ｜ Urban ｜ Clear traffic [YfI-TN4BH4c].mp4'</span>
+model_path = <span class="s4">'runs/detect/train4/weights/best.pt'</span>
+
+pred_folder = <span class="s4">&quot;predictions&quot;</span>
+pred_txt = os.path.join(pred_folder, <span class="s4">&quot;pred.txt&quot;</span>)
+pred_json = os.path.join(pred_folder, <span class="s4">&quot;pred_coco.json&quot;</span>)
+
+gt_txt = <span class="s4">&quot;predictions/gt.txt&quot;  </span><span class="s2"># Ground truth dosyanın tam yolu (sen ekle buraya)</span>
+
+<span class="s2"># -----------------Preparation ----------------- #</span>
+
+os.makedirs(pred_folder, exist_ok=<span class="s0">True</span>)
+<span class="s0">for </span>file <span class="s0">in </span>[pred_txt, pred_json]:
+    <span class="s0">if </span>os.path.exists(file):
+        os.remove(file)
+
+model = YOLO(model_path)
+tracker = DeepSort(max_age=<span class="s3">30</span>)
+cap = cv2.VideoCapture(video_path)
+
+coco_predictions = []
+frame_idx = <span class="s3">0</span>
+
+<span class="s2"># ----------------- Track and detection ----------------- #</span>
+
+<span class="s0">while True</span>:
+    ret, frame = cap.read()
+    <span class="s0">if not </span>ret:
+        print(<span class="s4">&quot;Video finished.&quot;</span>)
+        <span class="s0">break</span>
+
+    frame_idx += <span class="s3">1</span>
+    results = model(frame, imgsz=<span class="s3">640</span>, conf=<span class="s3">0.8</span>)[<span class="s3">0</span>]
+
+    detections = []
+    <span class="s0">if </span>results.boxes <span class="s0">and </span>results.boxes.xyxy <span class="s0">is not None</span>:
+        <span class="s0">for </span>box, conf, cls <span class="s0">in </span>zip(results.boxes.xyxy, results.boxes.conf, results.boxes.cls):
+            x1, y1, x2, y2 = box.int().tolist()
+            class_id = int(cls)
+            confidence = float(conf)
+            <span class="s0">if </span>confidence &gt; <span class="s3">0.1</span>:
+                detections.append(([x1, y1, x2 - x1, y2 - y1], confidence, class_id))
+
+    tracks = tracker.update_tracks(detections, frame=frame)
+    active_ids = set()
+
+    <span class="s0">with </span>open(pred_txt, <span class="s4">&quot;a&quot;</span>) <span class="s0">as </span>f:
+        <span class="s0">for </span>track <span class="s0">in </span>tracks:
+            <span class="s0">if not </span>track.is_confirmed():
+                <span class="s0">continue</span>
+
+            track_id = track.track_id
+            l, t, r, b = track.to_ltrb()
+            x1, y1, x2, y2 = map(int, [l, t, r, b])
+            conf = track.det_conf <span class="s0">if </span>track.det_conf <span class="s0">is not None else </span><span class="s3">0.0</span>
+            class_id = track.det_class <span class="s0">if </span>hasattr(track, <span class="s4">&quot;det_class&quot;</span>) <span class="s0">else </span><span class="s3">0</span>
+            class_name = CLASS_NAMES.get(class_id, <span class="s4">&quot;unknown&quot;</span>)
+
+            active_ids.add(track_id)
+
+            <span class="s2"># MotChallenge formatı: frame, id, x, y, w, h, conf, class_id, visibility</span>
+            f.write(<span class="s4">f&quot;</span><span class="s0">{</span>frame_idx<span class="s0">}</span><span class="s4">,</span><span class="s0">{</span>track_id<span class="s0">}</span><span class="s4">,</span><span class="s0">{</span>x1<span class="s0">}</span><span class="s4">,</span><span class="s0">{</span>y1<span class="s0">}</span><span class="s4">,</span><span class="s0">{</span>x2 - x1<span class="s0">}</span><span class="s4">,</span><span class="s0">{</span>y2 - y1<span class="s0">}</span><span class="s4">,</span><span class="s0">{</span>conf<span class="s0">:</span><span class="s4">.2f</span><span class="s0">}</span><span class="s4">,</span><span class="s0">{</span>class_id<span class="s0">}</span><span class="s4">,1</span><span class="s0">\n</span><span class="s4">&quot;</span>)
+
+            coco_predictions.append({
+                <span class="s4">&quot;image_id&quot;</span>: frame_idx,
+                <span class="s4">&quot;category_id&quot;</span>: class_id,
+                <span class="s4">&quot;bbox&quot;</span>: [x1, y1, x2 - x1, y2 - y1],
+                <span class="s4">&quot;score&quot;</span>: float(conf)
+            })
+
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (<span class="s3">0</span>, <span class="s3">255</span>, <span class="s3">0</span>), <span class="s3">2</span>)
+            cv2.putText(frame, <span class="s4">f'ID </span><span class="s0">{</span>track_id<span class="s0">} {</span>class_name<span class="s0">}</span><span class="s4">'</span>, (x1, y1 - <span class="s3">10</span>),
+                        cv2.FONT_HERSHEY_SIMPLEX, <span class="s3">0.6</span>, (<span class="s3">255</span>, <span class="s3">0</span>, <span class="s3">0</span>), <span class="s3">2</span>)
+
+    total_vehicles = len(active_ids)
+    traffic_level = <span class="s4">&quot;LOW&quot; </span><span class="s0">if </span>total_vehicles &lt; <span class="s3">10 </span><span class="s0">else </span><span class="s4">&quot;MID&quot; </span><span class="s0">if </span>total_vehicles &lt; <span class="s3">30 </span><span class="s0">else </span><span class="s4">&quot;HIGH&quot;</span>
+
+    cv2.putText(frame, <span class="s4">f'Total vehicle: </span><span class="s0">{</span>total_vehicles<span class="s0">}</span><span class="s4">'</span>, (<span class="s3">10</span>, <span class="s3">40</span>),
+                cv2.FONT_HERSHEY_SIMPLEX, <span class="s3">1</span>, (<span class="s3">0</span>, <span class="s3">255</span>, <span class="s3">255</span>), <span class="s3">2</span>)
+    cv2.putText(frame, <span class="s4">f'Traffic Density: </span><span class="s0">{</span>traffic_level<span class="s0">}</span><span class="s4">'</span>, (<span class="s3">10</span>, <span class="s3">80</span>),
+                cv2.FONT_HERSHEY_SIMPLEX, <span class="s3">1</span>, (<span class="s3">0</span>, <span class="s3">0</span>, <span class="s3">255</span>), <span class="s3">2</span>)
+
+    cv2.imshow(<span class="s4">&quot;YOLO + DeepSORT Traffic Density&quot;</span>, frame)
+    <span class="s0">if </span>cv2.waitKey(<span class="s3">1</span>) &amp; <span class="s3">0xFF </span>== ord(<span class="s4">&quot;q&quot;</span>):
+        <span class="s0">break</span>
+
+cap.release()
+cv2.destroyAllWindows()
+
+
+
+
+
+</pre>
+</body>
+</html>

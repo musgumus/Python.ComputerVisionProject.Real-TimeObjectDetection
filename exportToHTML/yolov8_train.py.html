@@ -1,0 +1,37 @@
+<html>
+<head>
+<title>yolov8_train.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #000080; font-weight: bold;}
+.s1 { color: #000000;}
+.s2 { color: #008000; font-weight: bold;}
+.s3 { color: #0000ff;}
+</style>
+</head>
+<body bgcolor="#ffffff">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#c0c0c0" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+yolov8_train.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span>ultralytics <span class="s0">import </span>YOLO
+<span class="s0">import </span>torch
+
+
+<span class="s0">def </span>main():
+    model = YOLO(<span class="s2">&quot;yolov8n.pt&quot;</span>)
+    model.train(
+        data=<span class="s2">r&quot;C:\Users\eren1\PycharmProjects\pythonProject1\venv\ua_detrra_cdataset\data.yaml&quot;</span>,
+        imgsz=<span class="s3">416</span>,
+        epochs=<span class="s3">50</span>,
+        batch=<span class="s3">16</span>,
+        augment=<span class="s0">True</span>
+    )
+
+<span class="s0">if </span>__name__ == <span class="s2">'__main__'</span>:
+    <span class="s0">from </span>multiprocessing <span class="s0">import </span>freeze_support
+    freeze_support()
+    main()</pre>
+</body>
+</html>
